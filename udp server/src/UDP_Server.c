@@ -68,36 +68,36 @@ void udpServer_init(void)
  *Steps
  */
 
-//void udp_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
-//{
-//	struct pbuf *txBuf;
-//
-//
-//
-//	char buf[100];
-//
-//
-//	int len = sprintf (buf,"Hello %s From UDP SERVER\n", (char*)p->payload);
-//
-//	/* allocate pbuf from RAM*/
-//	txBuf = pbuf_alloc(PBUF_TRANSPORT,len, PBUF_RAM);
-//
-//	/* copy the data into the buffer  */
-//	pbuf_take(txBuf, buf, len);
-//
-//	/* Connect to the remote client */
-//	udp_connect(upcb, addr, port);
-//
-//	/* Send a Reply to the Client */
-//	udp_send(upcb, txBuf);
-//
-//	/* free the UDP connection, so we can accept new clients */
-//	udp_disconnect(upcb);
-//
-//	/* Free the p_tx buffer */
-//	pbuf_free(txBuf);
-//
-//	/* Free the p buffer */
-//	pbuf_free(p);
-//}
-//
+void udp_receive_callback(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
+{
+	struct pbuf *txBuf;
+
+
+
+	char buf[100];
+
+
+	int len = sprintf (buf,"Hello %s From UDP SERVER\n", (char*)p->payload);
+
+	/* allocate pbuf from RAM*/
+	txBuf = pbuf_alloc(PBUF_TRANSPORT,len, PBUF_RAM);
+
+	/* copy the data into the buffer  */
+	pbuf_take(txBuf, buf, len);
+
+	/* Connect to the remote client */
+	udp_connect(upcb, addr, port);
+
+	/* Send a Reply to the Client */
+	udp_send(upcb, txBuf);
+
+	/* free the UDP connection, so we can accept new clients */
+	udp_disconnect(upcb);
+
+	/* Free the p_tx buffer */
+	pbuf_free(txBuf);
+
+	/* Free the p buffer */
+	pbuf_free(p);
+}
+
