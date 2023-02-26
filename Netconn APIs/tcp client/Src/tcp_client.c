@@ -13,22 +13,29 @@
 #include "tcp_client.h"
 #include "string.h"
 
+//=============================================================================
+
+//============netconn parameters=============================================
 static struct netconn *conn;
 static struct netbuf *buf;
 static ip_addr_t *addr, dest_addr;
 static unsigned short port, dest_port;
-char msgc[100];
-char smsgc[200];
+//=========================================================================
 
-char message [10] = "hello";
+//==================ARRAYS to Hold DATA===================================
+char ReceivedMessage[100];
+char ToSendMessage[200];
 char* ProgramToSend = (char*)0x10000000;
-//int indx = 0;
+//====================================================================
+
+//===================static functions used ===========================
 
 // Function to send the data to the server
-void tcpsend (char *data);
+static void tcpsend (char *data);
+static void tcp_ReseveMessage (void *arg );
+static void tcp_SendMessage (void *arg);
 
-// tcpsem is the binary semaphore to prevent the access to tcpsend
-//sys_sem_t tcpsem;
+//==========================================================
 
 static void tcpinit_thread(void *arg)
 {
@@ -54,47 +61,8 @@ static void tcpinit_thread(void *arg)
 			// If the connection to the server is established, the following will continue, else delete the connection
 			if (connect_error == ERR_OK)
 			{
-				// Release the semaphore once the connection is successful
-				//sys_sem_signal(&tcpsem);
-				while (1)
-				{
-					/* wait until the data is sent by the server */
-					if (netconn_recv(conn, &buf) == ERR_OK)
-					{
-						/* Extract the address and port in case they are required */
-						addr = netbuf_fromaddr(buf);  // get the address of the client
-						port = netbuf_fromport(buf);  // get the Port of the client
-
-						/* If there is some data remaining to be sent, the following process will continue */
-						do
-						{
-
-							strncpy (msgc, buf->p->payload, buf->p->len);   // get the message from the server
-
-							// Or modify the message received, so that we can send it back to the server
-							sprintf (smsgc, "\"%s\" was sent by the Server\n", msgc);
-
-							// semaphore must be taken before accessing the tcpsend function
-							//sys_arch_sem_wait(&tcpsem, 500);
-
-							if(strcmp(msgc , "SEND")==0)
-							{
-							  sys_thread_new("tcpinit_thread", tcpinit_thread, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
-
-							}
-
-							// send the data to the TCP Server
-							tcpsend (smsgc);
-
-							memset (msgc, '\0', 100);  // clear the buffer
-						}
-						while (netbuf_next(buf) >0);
-
-						netbuf_delete(buf);
-					}
-				}
+				sys_thread_new("tcp_ReseveMessage", tcp_ReseveMessage, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
 			}
-
 			else
 			{
 				/* Close connection and discard connection identifier. */
@@ -108,14 +76,15 @@ static void tcpinit_thread(void *arg)
 			netconn_delete(conn);
 		}
 	}
+
+	osThreadId_t id;
+	id = osThreadGetId();
+	osThreadTerminate(id);
 }
 
 void tcpsend (char *data)
 {
-	// send the data to the connected connection
 	netconn_write(conn, data, strlen(data), NETCONN_COPY);
-	// relaese the semaphore
-	//sys_sem_signal(&tcpsem);
 }
 
 
@@ -123,21 +92,6 @@ static void tcp_SendProgram (void *arg)
 {
 
 	tcpsend(ProgramToSend);
-
-	//	for(int i=0;i<3000;i++)
-	//		{
-	//			ProgramToSend[i] = 'a';
-	//		}
-	//	for (;;)
-	//	{
-	//		//sprintf (smsgc, "index value = %d\n", indx++);
-	//	// semaphore must be taken before accessing the tcpsend function
-	//		//sys_arch_sem_wait(&tcpsem, 500);
-	//		// send the data to the server
-	//
-	//		tcpsend(ProgramToSend);
-	//		//osDelay(500);
-	//	}
 	osThreadId_t id;
 	id = osThreadGetId();
 	osThreadTerminate(id);
@@ -146,42 +100,53 @@ static void tcp_SendProgram (void *arg)
 
 static void tcp_SendMessage (void *arg)
 {
-	tcpsend(message);
+	sprintf (ToSendMessage, "\"%s\" was sent by the Server\n", ReceivedMessage);
+	tcpsend(ToSendMessage);
+	memset (ToSendMessage, '\0', 200);  // clear the buffer
+
 	osThreadId_t id;
 	id = osThreadGetId();
 	osThreadTerminate(id);
-
 }
 
 void tcp_ReseveMessage (void *arg )
 {
-	if (netconn_recv(conn, &buf) == ERR_OK)
+
+	while (1)
 	{
-		do
+		/* wait until the data is sent by the server */
+		if (netconn_recv(conn, &buf) == ERR_OK)
 		{
+			/* Extract the address and port in case they are required */
+			addr = netbuf_fromaddr(buf);  // get the address of the client
+			port = netbuf_fromport(buf);  // get the Port of the client
 
-			strncpy (msgc, buf->p->payload, buf->p->len);   // get the message from the server
+			/* If there is some data remaining to be sent, the following process will continue */
+			do
+			{
 
-			// Or modify the message received, so that we can send it back to the server
-			sprintf (smsgc, "\"%s\" was sent by the Server\n", msgc);
+				strncpy (ReceivedMessage, buf->p->payload, buf->p->len);   // get the message from the server
 
-			// semaphore must be taken before accessing the tcpsend function
-			//sys_arch_sem_wait(&tcpsem, 500);
+				if(strcmp(ReceivedMessage , "SEND")==0)
+				{
+					sys_thread_new("tcp_SendProgram", tcp_SendProgram, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
 
-			// send the data to the TCP Server
-			tcpsend (smsgc);
+				}
+				else
+				{
+					// send the received data  using tcp_SendMessage
+					sys_thread_new("tcp_SendMessage", tcp_SendMessage, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
+				}
 
-			memset (msgc, '\0', 100);  // clear the buffer
+				//memset (ReceivedMessage, '\0', 100);  // clear the buffer
+
+			}
+			while (netbuf_next(buf) >0);
+
+			netbuf_delete(buf);
 		}
-		while (netbuf_next(buf) >0);
-
-		netbuf_delete(buf);
 	}
-
-	//	id = osThreadGetId();
-	//	osThreadTerminate(id);
 }
-
 
 
 void tcpclient_init (void)
@@ -190,11 +155,11 @@ void tcpclient_init (void)
 	{
 		ProgramToSend[i] = 'a';
 	}
-	//sys_sem_new(tcpsem, 0);  // the semaphore would prevent simultaneous access to tcpsend
 
 	sys_thread_new("tcpinit_thread", tcpinit_thread, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
-	//sys_thread_new("tcpSendProgram_thread", tcp_SendProgram, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
-	//sys_thread_new("tcp_ReseveMessage", tcp_ReseveMessage, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
-	//sys_thread_new("tcp_SendMessage", tcp_SendMessage, NULL, DEFAULT_THREAD_STACKSIZE,osPriorityNormal);
+
+	osThreadId_t id;
+	id = osThreadGetId();
+	osThreadTerminate(id);
 
 }
